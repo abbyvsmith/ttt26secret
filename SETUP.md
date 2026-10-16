@@ -46,14 +46,9 @@ Only @viget.com emails can sign up. Emails aren't verified, so this is honor-sys
 ## 3. Vercel (≈5 min)
 
 1. In Vercel, choose **Add New → Project** and import the `ttt26secret` GitHub repo. Vercel detects Vite automatically.
-2. **Settings → Environment Variables**: add
-
-   | Name | Value |
-   |---|---|
-   | `VITE_SUPABASE_URL` | Supabase Project URL |
-   | `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
-
-3. Redeploy. For local development, put the same two values in `.env.local`.
+2. Connect Supabase: **Storage / Integrations → Supabase**, then pick this project. The integration adds the environment variables. The app reads `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` and ignores the rest. The secret ones never reach the browser.
+   - Without the integration, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under **Settings → Environment Variables** instead.
+3. Redeploy whenever environment variables change. They're built in at deploy time. For local development, put `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`.
 
 ## 4. Test before launch
 
