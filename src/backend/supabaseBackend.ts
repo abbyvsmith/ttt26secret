@@ -1,6 +1,8 @@
 import { createClient, type Session } from '@supabase/supabase-js';
 import { ALLOWED_EMAIL_DOMAIN } from '../config';
-import type { Backend, Completion, Me } from './types';
+import type { Backend, Completion, Me, SubmittedPhoto } from './types';
+
+const thumbPathFor = (path: string) => path.replace(/\.jpg$/, '.thumb.jpg');
 
 export function createSupabaseBackend(url: string, anonKey: string): Backend {
   const sb = createClient(url, anonKey);
@@ -12,16 +14,16 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
   }
 
   async function loadMe(session: Session): Promise<Me> {
-    const { data, error } = await sb
-      .from('players')
-      .select('person_id')
-      .eq('user_id', session.user.id)
-      .maybeSingle();
-    if (error) throw error;
+    const [player, organizer] = await Promise.all([
+      sb.from('players').select('person_id').eq('user_id', session.user.id).maybeSingle(),
+      sb.rpc('is_organizer'),
+    ]);
+    if (player.error) throw player.error;
     return {
       userId: session.user.id,
       email: session.user.email ?? '',
-      personId: data?.person_id ?? null,
+      personId: player.data?.person_id ?? null,
+      isOrganizer: organizer.data === true,
     };
   }
 
@@ -35,7 +37,12 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
           if (!session) return cb(null);
           loadMe(session).then(cb, (e) => {
             console.error(e);
-            cb({ userId: session.user.id, email: session.user.email ?? '', personId: null });
+            cb({
+              userId: session.user.id,
+              email: session.user.email ?? '',
+              personId: null,
+              isOrganizer: false,
+            });
           });
         }, 0);
       });
@@ -117,26 +124,39 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
       if (error) throw error;
     },
 
-    async submitPhoto(taskId, photo, albumName) {
+    async submitPhoto(taskId, photo, thumb, albumName) {
       const session = await requireSession();
-      const path = `${session.user.id}/${taskId}-${Date.now()}.jpg`;
-      const { error } = await sb.storage
-        .from('photos')
-        .upload(path, photo, { contentType: 'image/jpeg' });
+      const userId = session.user.id;
+      const path = `${userId}/${taskId}-${Date.now()}.jpg`;
+      const photos = sb.storage.from('photos');
+
+      const { data: previous } = await sb
+        .from('completions')
+        .select('storage_path')
+        .eq('user_id', userId)
+        .eq('task_id', taskId)
+        .maybeSingle();
+
+      for (const [p, blob] of [
+        [path, photo],
+        [thumbPathFor(path), thumb],
+      ] as const) {
+        const { error } = await photos.upload(p, blob, { contentType: 'image/jpeg' });
+        if (error) throw error;
+      }
+
+      const { error } = await sb.from('completions').upsert({
+        user_id: userId,
+        task_id: taskId,
+        person_id: null,
+        album_name: albumName,
+        storage_path: path,
+      });
       if (error) throw error;
 
-      const res = await fetch('/api/submit-photo', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ taskId, storagePath: path, albumName }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? `Upload failed (${res.status})`);
-      }
+      // A re-upload replaces the old photo.
+      const old = previous?.storage_path;
+      if (old && old !== path) await photos.remove([old, thumbPathFor(old)]);
     },
 
     async getLeaderboard() {
@@ -150,6 +170,40 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
         points: r.points as number,
         lastScoredAt: r.last_scored_at as string | null,
       }));
+    },
+
+    async getAllPhotos() {
+      const { data, error } = await sb
+        .from('completions')
+        .select('task_id, user_id, album_name, storage_path, completed_at, players(people(name))')
+        .not('storage_path', 'is', null)
+        .order('completed_at');
+      if (error) throw error;
+
+      const paths = data.flatMap((r) => [r.storage_path!, thumbPathFor(r.storage_path!)]);
+      const urls = new Map<string, string>();
+      for (let i = 0; i < paths.length; i += 100) {
+        const { data: signed, error: signError } = await sb.storage
+          .from('photos')
+          .createSignedUrls(paths.slice(i, i + 100), 60 * 60);
+        if (signError) throw signError;
+        signed.forEach((s) => s.path && s.signedUrl && urls.set(s.path, s.signedUrl));
+      }
+
+      return data.map((r): SubmittedPhoto => {
+        const player = r.players as unknown as { people: { name: string } | null } | null;
+        const full = urls.get(r.storage_path!) ?? '';
+        return {
+          taskId: r.task_id,
+          userId: r.user_id,
+          playerName: player?.people?.name ?? 'unknown',
+          albumName: r.album_name,
+          completedAt: r.completed_at,
+          fullUrl: full,
+          // Fall back to the full photo if a preview is missing.
+          thumbUrl: urls.get(thumbPathFor(r.storage_path!)) || full,
+        };
+      });
     },
   };
 }

@@ -9,7 +9,7 @@ import { TaskIcon } from './TaskIcon';
 interface Props {
   task: Task;
   completion: Completion | undefined;
-  onSave: (photo: Blob, albumName: string | null) => Promise<void>;
+  onSave: (photo: Blob, thumb: Blob, albumName: string | null) => Promise<void>;
   onClose: () => void;
 }
 
@@ -36,8 +36,8 @@ export function PhotoSheet({ task, completion, onSave, onClose }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const photo = await compressImage(file);
-      await onSave(photo, needsText ? text.trim() : null);
+      const { photo, thumb } = await compressImage(file);
+      await onSave(photo, thumb, needsText ? text.trim() : null);
       onClose();
     } catch (e) {
       setError((e as Error).message);

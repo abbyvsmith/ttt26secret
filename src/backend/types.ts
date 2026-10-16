@@ -8,6 +8,19 @@ export interface Me {
   email: string;
   /** null until the player picks their name from the list */
   personId: number | null;
+  /** Can open the organizer page */
+  isOrganizer: boolean;
+}
+
+/** A photo as seen on the organizer page */
+export interface SubmittedPhoto {
+  taskId: string;
+  userId: string;
+  playerName: string;
+  albumName: string | null;
+  completedAt: string;
+  thumbUrl: string;
+  fullUrl: string;
 }
 
 export interface Completion {
@@ -40,6 +53,8 @@ export interface Backend {
   claimPerson(personId: number): Promise<Me>;
   getMyCompletions(): Promise<Completion[]>;
   savePersonAnswer(taskId: string, personId: number): Promise<void>;
-  submitPhoto(taskId: string, photo: Blob, albumName: string | null): Promise<void>;
+  submitPhoto(taskId: string, photo: Blob, thumb: Blob, albumName: string | null): Promise<void>;
   getLeaderboard(): Promise<LeaderboardRow[]>;
+  /** Organizers only: every submitted photo */
+  getAllPhotos(): Promise<SubmittedPhoto[]>;
 }

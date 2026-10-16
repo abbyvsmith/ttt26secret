@@ -5,6 +5,7 @@ import { TASKS_BY_ID, boardFor } from './game/tasks';
 import { Board } from './components/Board';
 import { BottomNav, type Tab } from './components/BottomNav';
 import { Leaderboard } from './components/Leaderboard';
+import { Organizer } from './components/Organizer';
 import { PersonSheet } from './components/PersonSheet';
 import { PhotoSheet } from './components/PhotoSheet';
 import { TaskList } from './components/TaskList';
@@ -16,6 +17,7 @@ export default function App() {
   const [people, setPeople] = useState<Person[]>([]);
   const [completions, setCompletions] = useState<Completion[]>([]);
   const [tab, setTab] = useState<Tab>('board');
+  const [showOrganizer, setShowOrganizer] = useState(false);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -63,22 +65,34 @@ export default function App() {
     <div className="app">
       <main className="app-main">
         {loadError && <p className="form-error">{loadError}</p>}
-        {tab === 'board' && (
+        {showOrganizer && <Organizer onBack={() => setShowOrganizer(false)} />}
+        {!showOrganizer && tab === 'board' && (
           <Board cells={cells} done={doneIds} activeTaskId={openTaskId} onOpen={setOpenTaskId} />
         )}
-        {tab === 'tasks' && (
+        {!showOrganizer && tab === 'tasks' && (
           <TaskList cells={cells} completions={byTask} people={people} onOpen={setOpenTaskId} />
         )}
-        {tab === 'leaderboard' && (
+        {!showOrganizer && tab === 'leaderboard' && (
           <>
             <Leaderboard myUserId={me.userId} refreshKey={refreshKey} />
+            {me.isOrganizer && (
+              <button className="btn-outline organizer-link" onClick={() => setShowOrganizer(true)}>
+                organizer: see all photos
+              </button>
+            )}
             <button className="btn-link" onClick={() => backend.signOut()}>
               sign out
             </button>
           </>
         )}
       </main>
-      <BottomNav tab={tab} onChange={setTab} />
+      <BottomNav
+        tab={tab}
+        onChange={(t) => {
+          setShowOrganizer(false);
+          setTab(t);
+        }}
+      />
 
       {openTask?.kind === 'person' && (
         <PersonSheet
@@ -99,8 +113,8 @@ export default function App() {
           task={openTask}
           completion={byTask.get(openTask.id)}
           onClose={close}
-          onSave={async (photo, albumName) => {
-            await backend.submitPhoto(openTask.id, photo, albumName);
+          onSave={async (photo, thumb, albumName) => {
+            await backend.submitPhoto(openTask.id, photo, thumb, albumName);
             reloadCompletions();
           }}
         />

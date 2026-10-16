@@ -11,6 +11,8 @@ export interface Task {
   kind: TaskKind;
   prompt: string;
   icon: number;
+  /** Photo tasks only: short name used for folders in the organizer download. */
+  shortName?: string;
   /** Photo tasks only: ask for an extra text answer. */
   textInput?: { label: string; placeholder: string };
 }
@@ -42,18 +44,29 @@ const PERSON_PROMPTS = [
 const PHOTO_TASKS: Omit<Task, 'id' | 'kind' | 'icon'>[] = [
   {
     prompt: 'Recreate a famous album cover with someone',
+    shortName: 'Album cover',
     textInput: { label: 'Which album?', placeholder: 'album name' },
   },
-  { prompt: 'Make the Viget logo with another person' },
+  { prompt: 'Make the Viget logo with another person', shortName: 'Viget logo' },
   {
     prompt:
       'You winning a rock paper scissors duel (one shot per duel — if you lose, pick a new opponent!)',
+    shortName: 'Rock paper scissors',
   },
-  { prompt: 'Any beverage you enjoyed with a teammate' },
-  { prompt: 'A walk or Uber with someone else' },
-  { prompt: "Proof you hung out with someone you don't see in your office" },
-  { prompt: 'You and some teammates at a tourist destination' },
-  { prompt: "You + teammates recreating something you've found in a museum" },
+  { prompt: 'Any beverage you enjoyed with a teammate', shortName: 'Beverage with a teammate' },
+  { prompt: 'A walk or Uber with someone else', shortName: 'Walk or Uber' },
+  {
+    prompt: "Proof you hung out with someone you don't see in your office",
+    shortName: 'Someone from another office',
+  },
+  {
+    prompt: 'You and some teammates at a tourist destination',
+    shortName: 'Tourist destination',
+  },
+  {
+    prompt: "You + teammates recreating something you've found in a museum",
+    shortName: 'Museum recreation',
+  },
 ];
 
 export const TASKS: Task[] = [

@@ -44,11 +44,15 @@ function save(s: State) {
 
 export function createDemoBackend(): Backend {
   let state = load();
-  const photoUrls = new Map<string, string>(); // in-memory only
+  // in-memory only, so photos disappear on reload in demo mode
+  const photoUrls = new Map<string, string>();
+  const thumbUrls = new Map<string, string>();
   let listener: ((me: Me | null) => void) | null = null;
 
   const me = (): Me | null =>
-    state.signedIn ? { userId: USER_ID, email: 'you@viget.com', personId: state.personId } : null;
+    state.signedIn
+      ? { userId: USER_ID, email: 'you@viget.com', personId: state.personId, isOrganizer: true }
+      : null;
   const update = (s: State) => {
     state = s;
     save(s);
@@ -101,9 +105,10 @@ export function createDemoBackend(): Backend {
       upsert({ taskId, personId, albumName: null, completedAt: new Date().toISOString() });
     },
 
-    async submitPhoto(taskId, photo, albumName) {
+    async submitPhoto(taskId, photo, thumb, albumName) {
       await delay(900);
       photoUrls.set(taskId, URL.createObjectURL(photo));
+      thumbUrls.set(taskId, URL.createObjectURL(thumb));
       upsert({ taskId, personId: null, albumName, completedAt: new Date().toISOString() });
     },
 
@@ -136,6 +141,21 @@ export function createDemoBackend(): Backend {
           (a.lastScoredAt ?? '9').localeCompare(b.lastScoredAt ?? '9') ||
           a.name.localeCompare(b.name),
       );
+    },
+
+    async getAllPhotos() {
+      const name = PEOPLE.find((p) => p.id === state.personId)?.name ?? 'you';
+      return state.completions
+        .filter((c) => photoUrls.has(c.taskId))
+        .map((c) => ({
+          taskId: c.taskId,
+          userId: USER_ID,
+          playerName: name,
+          albumName: c.albumName,
+          completedAt: c.completedAt,
+          fullUrl: photoUrls.get(c.taskId)!,
+          thumbUrl: thumbUrls.get(c.taskId)!,
+        }));
     },
   };
 }

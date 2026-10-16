@@ -517,3 +517,72 @@ button.tile:active {
   margin-top: 16px;
   font-size: 16px;
 }
+
+/* ---------- Organizer ---------- */
+
+.organizer-link {
+  margin-top: 20px;
+}
+.back-link {
+  margin: 0;
+  align-self: flex-start;
+}
+.organizer-download {
+  margin: 0 0 24px;
+}
+.organizer-task {
+  margin-bottom: 24px;
+}
+.organizer-task-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  border-bottom: 0.8px solid var(--orange);
+}
+.organizer-task-heading h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 24px;
+  font-weight: 400;
+  text-transform: lowercase;
+}
+.organizer-task-heading .muted {
+  font-size: 22px;
+}
+.organizer-empty {
+  margin: 0;
+  font-size: 18px;
+  text-transform: lowercase;
+}
+.organizer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.organizer-photo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.organizer-photo img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 0.8px solid var(--orange);
+  background: #fff;
+}
+.organizer-caption {
+  font-size: 20px;
+  line-height: 1.1;
+  text-transform: lowercase;
+}
+.organizer-album {
+  display: block;
+  font-size: 16px;
+  color: #6b6b6b;
+}

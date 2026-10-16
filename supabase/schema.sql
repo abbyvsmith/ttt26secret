@@ -1,4 +1,4 @@
--- Viget Bingo — run this once in Supabase → SQL Editor → New query.
+-- Viget Bingo — run this in Supabase → SQL Editor → New query.
 -- Safe to re-run: it never deletes data (it only recreates functions and policies).
 
 -- Only people with this email domain can play.
@@ -16,12 +16,12 @@ create table if not exists public.people (
 );
 
 -- Task text lives in the app (src/game/tasks.ts); the database only needs the
--- kind (for scoring and security) and a label (for the Google Drive folder name).
+-- kind, for scoring and security.
 create table if not exists public.tasks (
   id    text primary key,
-  kind  text not null check (kind in ('person', 'photo')),
-  label text not null
+  kind  text not null check (kind in ('person', 'photo'))
 );
+alter table public.tasks drop column if exists label;
 
 -- A signed-in Google account, linked to one name on the people list.
 create table if not exists public.players (
@@ -36,14 +36,27 @@ create table if not exists public.completions (
   task_id        text not null references public.tasks,
   -- blue squares
   person_id      int references public.people,
-  -- orange squares
+  -- orange squares: path in the "photos" storage bucket, e.g. <user>/photo-01-123.jpg
+  -- (a small preview sits next to it as <user>/photo-01-123.thumb.jpg)
   album_name     text,
   storage_path   text,
-  drive_file_id  text,
-  drive_url      text,
   completed_at   timestamptz not null default now(),
   primary key (user_id, task_id)
 );
+alter table public.completions drop column if exists drive_file_id;
+alter table public.completions drop column if exists drive_url;
+
+-- People who can open the organizer page (see every photo).
+create table if not exists public.organizers (
+  email text primary key
+);
+
+create or replace function public.is_organizer()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from organizers where lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+  )
+$$;
 
 -- Changing an answer counts as a new scoring time (used for tie-breaks).
 create or replace function public.touch_completed_at()
@@ -57,12 +70,24 @@ drop trigger if exists completions_touch on public.completions;
 create trigger completions_touch before update on public.completions
   for each row execute function public.touch_completed_at();
 
+-- A blue answer must name a person; an orange answer must point at the
+-- player's own photo folder.
+create or replace function public.valid_completion(p_task text, p_person int, p_path text)
+returns boolean language sql stable as $$
+  select case (select kind from public.tasks where id = p_task)
+    when 'person' then p_person is not null and p_path is null
+    when 'photo'  then p_person is null and p_path like auth.uid()::text || '/%'
+    else false
+  end
+$$;
+
 -- ---------- Row level security ----------
 
 alter table public.people      enable row level security;
 alter table public.tasks       enable row level security;
 alter table public.players     enable row level security;
 alter table public.completions enable row level security;
+alter table public.organizers  enable row level security;
 
 drop policy if exists "people readable" on public.people;
 create policy "people readable" on public.people
@@ -81,28 +106,28 @@ create policy "claim own player" on public.players
   for insert to authenticated
   with check (user_id = auth.uid() and public.is_allowed_user());
 
--- Players only ever see their own answers and photos.
+-- Players see only their own answers and photos; organizers see everyone's.
 drop policy if exists "read own completions" on public.completions;
 create policy "read own completions" on public.completions
-  for select to authenticated using (user_id = auth.uid());
+  for select to authenticated using (user_id = auth.uid() or public.is_organizer());
 
--- Players write blue answers directly. Orange (photo) completions are written
--- only by the server (api/submit-photo.ts) after the Drive upload succeeds.
 drop policy if exists "write own person answers" on public.completions;
-create policy "write own person answers" on public.completions
+drop policy if exists "update own person answers" on public.completions;
+
+drop policy if exists "insert own answers" on public.completions;
+create policy "insert own answers" on public.completions
   for insert to authenticated
   with check (
-    user_id = auth.uid() and public.is_allowed_user() and person_id is not null
-    and exists (select 1 from public.tasks t where t.id = task_id and t.kind = 'person')
+    user_id = auth.uid() and public.is_allowed_user()
+    and public.valid_completion(task_id, person_id, storage_path)
   );
 
-drop policy if exists "update own person answers" on public.completions;
-create policy "update own person answers" on public.completions
+drop policy if exists "update own answers" on public.completions;
+create policy "update own answers" on public.completions
   for update to authenticated
   using (user_id = auth.uid())
   with check (
-    user_id = auth.uid() and person_id is not null
-    and exists (select 1 from public.tasks t where t.id = task_id and t.kind = 'person')
+    user_id = auth.uid() and public.valid_completion(task_id, person_id, storage_path)
   );
 
 -- ---------- Leaderboard ----------
@@ -148,7 +173,9 @@ $$;
 revoke execute on function public.leaderboard() from public, anon;
 grant execute on function public.leaderboard() to authenticated;
 
--- ---------- Photo storage (private; each player can only touch their own folder) ----------
+-- ---------- Photo storage (private) ----------
+-- Each player can add, view and replace files in their own folder only.
+-- Organizers can view every file.
 
 insert into storage.buckets (id, name, public)
 values ('photos', 'photos', false)
@@ -162,6 +189,14 @@ create policy "own photos insert" on storage.objects
 drop policy if exists "own photos read" on storage.objects;
 create policy "own photos read" on storage.objects
   for select to authenticated
+  using (
+    bucket_id = 'photos'
+    and ((storage.foldername(name))[1] = auth.uid()::text or public.is_organizer())
+  );
+
+drop policy if exists "own photos delete" on storage.objects;
+create policy "own photos delete" on storage.objects
+  for delete to authenticated
   using (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- ---------- Seed data ----------
@@ -171,29 +206,18 @@ insert into public.people (name, sort) values
   ('Jackson', 6), ('Jenna', 7), ('Katie', 8), ('KV', 9), ('Liv', 10), ('Owen', 11)
 on conflict (name) do update set sort = excluded.sort;
 
-insert into public.tasks (id, kind, label) values
-  ('person-01', 'person', 'Night owl'),
-  ('person-02', 'person', 'Morning person'),
-  ('person-03', 'person', 'Makes their bed'),
-  ('person-04', 'person', 'Rewatched a TV series'),
-  ('person-05', 'person', 'Swum in two oceans'),
-  ('person-06', 'person', 'Helicopter or hot air balloon'),
-  ('person-07', 'person', 'Performed on stage'),
-  ('person-08', 'person', '1,000-mile road trip'),
-  ('person-09', 'person', 'Lived abroad'),
-  ('person-10', 'person', 'Small school'),
-  ('person-11', 'person', 'Met someone famous'),
-  ('person-12', 'person', 'Bakes bread'),
-  ('person-13', 'person', 'Juggling or magic'),
-  ('person-14', 'person', 'Garden or houseplants'),
-  ('person-15', 'person', 'Ran a race'),
-  ('person-16', 'person', 'Skydiving, bungee or zipline'),
-  ('photo-01', 'photo', '01 Album cover'),
-  ('photo-02', 'photo', '02 Viget logo'),
-  ('photo-03', 'photo', '03 Rock paper scissors'),
-  ('photo-04', 'photo', '04 Beverage with a teammate'),
-  ('photo-05', 'photo', '05 Walk or Uber'),
-  ('photo-06', 'photo', '06 Someone from another office'),
-  ('photo-07', 'photo', '07 Tourist destination'),
-  ('photo-08', 'photo', '08 Museum recreation')
-on conflict (id) do update set kind = excluded.kind, label = excluded.label;
+insert into public.tasks (id, kind) values
+  ('person-01', 'person'), ('person-02', 'person'), ('person-03', 'person'),
+  ('person-04', 'person'), ('person-05', 'person'), ('person-06', 'person'),
+  ('person-07', 'person'), ('person-08', 'person'), ('person-09', 'person'),
+  ('person-10', 'person'), ('person-11', 'person'), ('person-12', 'person'),
+  ('person-13', 'person'), ('person-14', 'person'), ('person-15', 'person'),
+  ('person-16', 'person'),
+  ('photo-01', 'photo'), ('photo-02', 'photo'), ('photo-03', 'photo'), ('photo-04', 'photo'),
+  ('photo-05', 'photo'), ('photo-06', 'photo'), ('photo-07', 'photo'), ('photo-08', 'photo')
+on conflict (id) do update set kind = excluded.kind;
+
+-- Organizers: add anyone else who should see all photos.
+insert into public.organizers (email) values
+  ('abby.smith@viget.com')
+on conflict (email) do nothing;
