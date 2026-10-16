@@ -1,6 +1,6 @@
 # Viget Bingo: setup
 
-React (Vite) app hosted on Vercel, with Supabase for sign-in, data and photo storage.
+React (Vite) app hosted on Vercel, with Supabase for accounts, data and photo storage.
 
 ```
 src/game/tasks.ts       ← the 24 prompts, tile artwork mapping, scoring, board shuffle
@@ -23,21 +23,25 @@ With no keys in `.env.local`, the app runs in **demo mode**: sign-in is faked, d
 ## 1. Supabase (≈10 min)
 
 1. Create a project at supabase.com (the free tier is fine).
-2. **SQL Editor → New query**: paste all of `supabase/schema.sql` and run it.
+2. **SQL Editor → New query**: paste all of `supabase/schema.sql` and run it. Re-run it whenever the file changes; it's safe to run again.
    - This creates the private `photos` storage bucket.
    - It also makes **abby.smith@viget.com** an organizer. To add more organizers, edit the last `insert` in the file, or run `insert into organizers (email) values ('someone@viget.com');`.
 3. **Project Settings → API**: copy the **Project URL** and the **anon public** key.
 
-## 2. Google sign-in (≈5 min)
+## 2. Sign-in settings (≈2 min)
 
-1. In Google Cloud (signed in as your @viget.com account), create or pick a project.
-2. **APIs & Services → OAuth consent screen**: choose **Internal**. This limits sign-in to Viget accounts.
-3. **APIs & Services → Credentials → Create credentials → OAuth client ID** → *Web application*.
-   - Authorized redirect URI: `https://<your-project-ref>.supabase.co/auth/v1/callback`
-4. In Supabase: **Authentication → Sign In / Providers → Google**. Turn it on and paste the client ID and secret.
-5. In Supabase: **Authentication → URL Configuration**
+Players sign up with their email, their name from the list, and a password.
+
+1. Supabase → **Authentication → Sign In / Providers → Email**:
+   - Keep **Email** turned on.
+   - Turn **Confirm email** OFF, so people can play right after signing up. (With it on, Supabase's built-in email sends only a few messages per hour.)
+2. Supabase → **Authentication → URL Configuration**. This is where password-reset links send people.
    - Site URL: your Vercel URL (e.g. `https://ttt26secret.vercel.app`)
-   - Redirect URLs: add `http://localhost:5173` and `https://*.vercel.app/**`
+   - Redirect URLs: add `http://localhost:5173`
+
+Only @viget.com emails can sign up. Emails aren't verified, so this is honor-system. That's fine for a team game.
+
+**Forgot password:** players tap *forgot password?* to get a reset email. If it doesn't arrive (built-in email is rate-limited), go to **Authentication → Users**, find them, and choose **Send password recovery**.
 
 ## 3. Vercel (≈5 min)
 
@@ -53,7 +57,7 @@ With no keys in `.env.local`, the app runs in **demo mode**: sign-in is faked, d
 
 ## 4. Test before launch
 
-1. Sign in with your Viget account → pick your name.
+1. Create an account: email, your name, password. You land on your board.
 2. Answer a blue square → the tile fills in → the leaderboard shows 50.
 3. Upload a photo to an orange square → the leaderboard goes up by 200.
 4. Leaderboard → **organizer: see all photos** → the photo appears under its task.

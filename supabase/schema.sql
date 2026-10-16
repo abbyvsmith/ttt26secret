@@ -130,6 +130,20 @@ create policy "update own answers" on public.completions
     user_id = auth.uid() and public.valid_completion(task_id, person_id, storage_path)
   );
 
+-- ---------- Sign-up name list ----------
+-- The sign-up form runs before anyone is signed in, so it can't read the
+-- people table directly. This exposes only first names and whether each is taken.
+
+create or replace function public.people_for_signup()
+returns table (id int, name text, claimed boolean)
+language sql stable security definer set search_path = public as $$
+  select pe.id, pe.name, exists (select 1 from players p where p.person_id = pe.id)
+  from people pe
+  order by pe.sort
+$$;
+
+grant execute on function public.people_for_signup() to anon, authenticated;
+
 -- ---------- Leaderboard ----------
 -- Points: blue 50, orange 200, +400 for all 16 blue, +1600 for all 8 orange.
 -- Ties: whoever reached their score first (earliest latest-scoring time).

@@ -20,6 +20,7 @@ const OTHERS = [
 
 interface State {
   signedIn: boolean;
+  account?: { email: string; password: string };
   personId: number | null;
   completions: Omit<Completion, 'photoUrl'>[];
 }
@@ -47,11 +48,16 @@ export function createDemoBackend(): Backend {
   // in-memory only, so photos disappear on reload in demo mode
   const photoUrls = new Map<string, string>();
   const thumbUrls = new Map<string, string>();
-  let listener: ((me: Me | null) => void) | null = null;
+  let listener: ((me: Me | null, recovery: boolean) => void) | null = null;
 
   const me = (): Me | null =>
     state.signedIn
-      ? { userId: USER_ID, email: 'you@viget.com', personId: state.personId, isOrganizer: true }
+      ? {
+          userId: USER_ID,
+          email: state.account?.email ?? 'you@viget.com',
+          personId: state.personId,
+          isOrganizer: true,
+        }
       : null;
   const update = (s: State) => {
     state = s;
@@ -69,26 +75,51 @@ export function createDemoBackend(): Backend {
 
     onAuthChange(cb) {
       listener = cb;
-      setTimeout(() => cb(me()), 0);
+      setTimeout(() => cb(me(), false), 0);
       return () => (listener = null);
     },
 
-    async signIn() {
+    async signIn(email, password) {
+      await delay();
+      const a = state.account;
+      if (!a || a.email.toLowerCase() !== email.toLowerCase() || a.password !== password) {
+        throw new Error('That email and password don’t match.');
+      }
       update({ ...state, signedIn: true });
-      listener?.(me());
+      listener?.(me(), false);
+    },
+
+    async signUp(email, password, personId) {
+      await delay();
+      if (!email.toLowerCase().endsWith('@viget.com')) {
+        throw new Error('Please use your @viget.com email.');
+      }
+      update({ ...state, account: { email, password }, personId, signedIn: true, completions: [] });
+      listener?.(me(), false);
+      return { needsConfirmation: false };
+    },
+
+    async requestPasswordReset() {
+      await delay();
+    },
+
+    async updatePassword(password) {
+      if (state.account) update({ ...state, account: { ...state.account, password } });
+      listener?.(me(), false);
     },
 
     async signOut() {
       update({ ...state, signedIn: false });
-      listener?.(null);
+      listener?.(null, false);
     },
 
     async getPeople() {
       return PEOPLE;
     },
 
-    async getClaimedPersonIds() {
-      return OTHERS.map((o) => o.personId);
+    async getSignupPeople() {
+      const taken = new Set(OTHERS.map((o) => o.personId));
+      return PEOPLE.map((p) => ({ ...p, claimed: taken.has(p.id) }));
     },
 
     async claimPerson(personId) {

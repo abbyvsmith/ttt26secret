@@ -9,11 +9,12 @@ import { Organizer } from './components/Organizer';
 import { PersonSheet } from './components/PersonSheet';
 import { PhotoSheet } from './components/PhotoSheet';
 import { TaskList } from './components/TaskList';
-import { ClaimName, SignIn } from './components/Welcome';
+import { ClaimName, SetNewPassword, SignIn } from './components/Welcome';
 
 export default function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false);
   const [people, setPeople] = useState<Person[]>([]);
   const [completions, setCompletions] = useState<Completion[]>([]);
   const [tab, setTab] = useState<Tab>('board');
@@ -24,16 +25,23 @@ export default function App() {
 
   useEffect(
     () =>
-      backend.onAuthChange((next) => {
+      backend.onAuthChange((next, recovery) => {
         if (next && !next.email.toLowerCase().endsWith(`@${ALLOWED_EMAIL_DOMAIN}`)) {
-          setAuthError(`Please use your @${ALLOWED_EMAIL_DOMAIN} account.`);
+          setAuthError(`Please use your @${ALLOWED_EMAIL_DOMAIN} email.`);
           backend.signOut();
           return;
         }
+        if (recovery) setRecovering(true);
         setMe(next);
       }),
     [],
   );
+
+  // Every sign-in starts on the board.
+  useEffect(() => {
+    setTab('board');
+    setShowOrganizer(false);
+  }, [me?.userId]);
 
   useEffect(() => {
     if (!me) return;
@@ -55,8 +63,9 @@ export default function App() {
 
   if (me === undefined) return <div className="app-loading" />;
   if (me === null) return <SignIn error={authError} />;
+  if (recovering) return <SetNewPassword onDone={() => setRecovering(false)} />;
+  if (me.personId == null) return <ClaimName onClaimed={setMe} />;
   if (!people.length && !loadError) return <div className="app-loading" />;
-  if (me.personId == null) return <ClaimName people={people} onClaimed={setMe} />;
 
   const openTask = openTaskId ? TASKS_BY_ID.get(openTaskId) : undefined;
   const close = () => setOpenTaskId(null);

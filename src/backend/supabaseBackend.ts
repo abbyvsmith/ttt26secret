@@ -27,37 +27,97 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
     };
   }
 
+  let listener: ((me: Me | null, recovery: boolean) => void) | null = null;
+  let emitSeq = 0;
+
+  /** Look up the player and tell the app; only the newest lookup wins. */
+  function emit(session: Session | null, recovery = false) {
+    const seq = ++emitSeq;
+    if (!session) return listener?.(null, false);
+    loadMe(session).then(
+      (me) => seq === emitSeq && listener?.(me, recovery),
+      (e) => {
+        console.error(e);
+        if (seq === emitSeq) {
+          listener?.(
+            { userId: session.user.id, email: session.user.email ?? '', personId: null, isOrganizer: false },
+            recovery,
+          );
+        }
+      },
+    );
+  }
+
+  async function insertPlayer(session: Session, personId: number) {
+    const { error } = await sb.from('players').insert({
+      user_id: session.user.id,
+      person_id: personId,
+      email: session.user.email,
+    });
+    if (error) {
+      if (error.code === '23505') throw new Error('Someone already picked that name.');
+      throw error;
+    }
+  }
+
   return {
     isDemo: false,
 
     onAuthChange(cb) {
-      const { data } = sb.auth.onAuthStateChange((_event, session) => {
+      listener = cb;
+      const { data } = sb.auth.onAuthStateChange((event, session) => {
         // Supabase recommends not awaiting other calls inside this callback.
-        setTimeout(() => {
-          if (!session) return cb(null);
-          loadMe(session).then(cb, (e) => {
-            console.error(e);
-            cb({
-              userId: session.user.id,
-              email: session.user.email ?? '',
-              personId: null,
-              isOrganizer: false,
-            });
-          });
-        }, 0);
+        setTimeout(() => emit(session, event === 'PASSWORD_RECOVERY'), 0);
       });
-      return () => data.subscription.unsubscribe();
+      return () => {
+        listener = null;
+        data.subscription.unsubscribe();
+      };
     },
 
-    async signIn() {
-      const { error } = await sb.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-          queryParams: { hd: ALLOWED_EMAIL_DOMAIN, prompt: 'select_account' },
-        },
+    async signIn(email, password) {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) {
+        throw new Error(
+          error.message === 'Invalid login credentials'
+            ? 'That email and password don’t match.'
+            : error.message,
+        );
+      }
+    },
+
+    async signUp(email, password, personId) {
+      if (!email.toLowerCase().endsWith(`@${ALLOWED_EMAIL_DOMAIN}`)) {
+        throw new Error(`Please use your @${ALLOWED_EMAIL_DOMAIN} email.`);
+      }
+      const { data, error } = await sb.auth.signUp({ email, password });
+      if (error) {
+        throw new Error(
+          /already registered/i.test(error.message)
+            ? 'That email already has an account. Sign in instead.'
+            : error.message,
+        );
+      }
+      // No session means Supabase is set to require email confirmation; the
+      // player picks their name after their first sign-in instead.
+      if (!data.session) return { needsConfirmation: true };
+      await insertPlayer(data.session, personId);
+      emit(data.session);
+      return { needsConfirmation: false };
+    },
+
+    async requestPasswordReset(email) {
+      const { error } = await sb.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
       });
       if (error) throw error;
+    },
+
+    async updatePassword(password) {
+      const { data, error } = await sb.auth.updateUser({ password });
+      if (error) throw error;
+      const { data: session } = await sb.auth.getSession();
+      if (data.user && session.session) emit(session.session);
     },
 
     async signOut() {
@@ -70,23 +130,15 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
       return data;
     },
 
-    async getClaimedPersonIds() {
-      const { data, error } = await sb.from('players').select('person_id');
+    async getSignupPeople() {
+      const { data, error } = await sb.rpc('people_for_signup');
       if (error) throw error;
-      return data.map((r) => r.person_id as number);
+      return data as { id: number; name: string; claimed: boolean }[];
     },
 
     async claimPerson(personId) {
       const session = await requireSession();
-      const { error } = await sb.from('players').insert({
-        user_id: session.user.id,
-        person_id: personId,
-        email: session.user.email,
-      });
-      if (error) {
-        if (error.code === '23505') throw new Error('Someone already picked that name.');
-        throw error;
-      }
+      await insertPlayer(session, personId);
       return loadMe(session);
     },
 
