@@ -1,6 +1,6 @@
 // Demo mode: used when no Supabase keys are configured. Everything is saved in
 // this browser's localStorage so the app can be clicked through end to end.
-import { TASKS_BY_ID, scoreFor } from '../game/tasks';
+import { TASKS_BY_ID, bingoLines, boardFor, scoreFor } from '../game/tasks';
 import type { Backend, Completion, LeaderboardRow, Me, Person } from './types';
 
 const KEY = 'viget-bingo-demo';
@@ -13,9 +13,9 @@ const PEOPLE: Person[] = [
 
 // Pretend other players, so the leaderboard has something to show.
 const OTHERS = [
-  { personId: 2, personDone: 9, photoDone: 3, at: '2026-10-16T15:10:00Z' },
-  { personId: 7, personDone: 16, photoDone: 2, at: '2026-10-16T16:42:00Z' },
-  { personId: 10, personDone: 5, photoDone: 1, at: '2026-10-16T14:05:00Z' },
+  { personId: 2, personDone: 9, photoDone: 3, bingos: 1, at: '2026-10-16T15:10:00Z' },
+  { personId: 7, personDone: 16, photoDone: 2, bingos: 2, at: '2026-10-16T16:42:00Z' },
+  { personId: 10, personDone: 5, photoDone: 1, bingos: 0, at: '2026-10-16T14:05:00Z' },
 ];
 
 interface State {
@@ -149,7 +149,8 @@ export function createDemoBackend(): Backend {
         name: PEOPLE.find((p) => p.id === o.personId)!.name,
         personDone: o.personDone,
         photoDone: o.photoDone,
-        points: scoreFor(o.personDone, o.photoDone),
+        bingos: o.bingos,
+        points: scoreFor(o.personDone, o.photoDone, o.bingos),
         lastScoredAt: o.at,
       }));
       if (state.personId) {
@@ -157,12 +158,15 @@ export function createDemoBackend(): Backend {
         const personDone = kinds.filter((k) => k === 'person').length;
         const photoDone = kinds.filter((k) => k === 'photo').length;
         const last = state.completions.map((c) => c.completedAt).sort().at(-1) ?? null;
+        const done = new Set(state.completions.map((c) => c.taskId));
+        const bingos = bingoLines(boardFor(USER_ID), done).length;
         rows.push({
           userId: USER_ID,
           name: PEOPLE.find((p) => p.id === state.personId)!.name,
           personDone,
           photoDone,
-          points: scoreFor(personDone, photoDone),
+          bingos,
+          points: scoreFor(personDone, photoDone, bingos),
           lastScoredAt: last,
         });
       }

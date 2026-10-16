@@ -89,21 +89,38 @@ export const TASKS_BY_ID = new Map(TASKS.map((t) => [t.id, t]));
 // ---------- Scoring (keep in sync with public.leaderboard() in schema.sql) ----------
 
 export const POINTS = {
-  person: 50,
-  photo: 200,
-  allPersonBonus: 400,
-  allPhotoBonus: 1600,
+  person: 10,
+  photo: 50,
+  bingo: 100,
+  allPersonBonus: 200,
+  allPhotoBonus: 500,
 };
 
 export const PERSON_COUNT = PERSON_PROMPTS.length;
 export const PHOTO_COUNT = PHOTO_TASKS.length;
 
-export function scoreFor(personDone: number, photoDone: number): number {
+export function scoreFor(personDone: number, photoDone: number, bingos: number): number {
   return (
     personDone * POINTS.person +
     photoDone * POINTS.photo +
+    bingos * POINTS.bingo +
     (personDone === PERSON_COUNT ? POINTS.allPersonBonus : 0) +
     (photoDone === PHOTO_COUNT ? POINTS.allPhotoBonus : 0)
+  );
+}
+
+/** The 12 lines that make a bingo: 5 rows, 5 columns, 2 diagonals (cell indexes). */
+export const BINGO_LINES: number[][] = [
+  ...[0, 1, 2, 3, 4].map((r) => [0, 1, 2, 3, 4].map((c) => r * 5 + c)),
+  ...[0, 1, 2, 3, 4].map((c) => [0, 1, 2, 3, 4].map((r) => r * 5 + c)),
+  [0, 6, 12, 18, 24],
+  [4, 8, 12, 16, 20],
+];
+
+/** Completed lines on a board; the free space always counts. */
+export function bingoLines(cells: (string | 'free')[], done: Set<string>): number[][] {
+  return BINGO_LINES.filter((line) =>
+    line.every((i) => cells[i] === 'free' || done.has(cells[i])),
   );
 }
 

@@ -41,6 +41,7 @@ export interface LeaderboardRow {
   name: string;
   personDone: number;
   photoDone: number;
+  bingos: number;
   points: number;
   lastScoredAt: string | null;
 }

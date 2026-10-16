@@ -1,5 +1,6 @@
 import { createClient, type Session } from '@supabase/supabase-js';
 import { ALLOWED_EMAIL_DOMAIN } from '../config';
+import { boardFor } from '../game/tasks';
 import type { Backend, Completion, Me, SubmittedPhoto } from './types';
 
 const thumbPathFor = (path: string) => path.replace(/\.jpg$/, '.thumb.jpg');
@@ -15,10 +16,15 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
 
   async function loadMe(session: Session): Promise<Me> {
     const [player, organizer] = await Promise.all([
-      sb.from('players').select('person_id').eq('user_id', session.user.id).maybeSingle(),
+      sb.from('players').select('person_id, board').eq('user_id', session.user.id).maybeSingle(),
       sb.rpc('is_organizer'),
     ]);
     if (player.error) throw player.error;
+    // Save the player's board once so the leaderboard can count their bingos.
+    if (player.data && !player.data.board) {
+      const { error } = await sb.rpc('set_my_board', { cells: boardFor(session.user.id) });
+      if (error) console.error('Could not save board', error);
+    }
     return {
       userId: session.user.id,
       email: session.user.email ?? '',
@@ -219,6 +225,7 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
         name: r.name as string,
         personDone: r.person_done as number,
         photoDone: r.photo_done as number,
+        bingos: r.bingos as number,
         points: r.points as number,
         lastScoredAt: r.last_scored_at as string | null,
       }));

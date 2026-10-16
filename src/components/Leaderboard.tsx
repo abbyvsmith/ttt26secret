@@ -37,6 +37,7 @@ export function Leaderboard({ myUserId, refreshKey }: { myUserId: string; refres
                 <span className="lb-progress">
                   <span className="dot dot-blue" /> {r.personDone}/{PERSON_COUNT}
                   <span className="dot dot-orange" /> {r.photoDone}/{PHOTO_COUNT}
+                  <span className="dot dot-bingo" /> {r.bingos} bingo{r.bingos === 1 ? '' : 's'}
                 </span>
               </span>
               <span className="lb-points">{r.points.toLocaleString()}</span>
@@ -49,6 +50,8 @@ export function Leaderboard({ myUserId, refreshKey }: { myUserId: string; refres
         <h2>scoring</h2>
         <p><span className="dot dot-blue" /> blue square: {POINTS.person} pts</p>
         <p><span className="dot dot-orange" /> orange photo: {POINTS.photo} pts</p>
+        <p><span className="dot dot-bingo" /> each bingo: {POINTS.bingo} pts</p>
+        <p className="muted">a bingo is a full row, column or diagonal. the free space counts.</p>
         <p>all {PERSON_COUNT} blue: +{POINTS.allPersonBonus.toLocaleString()} bonus</p>
         <p>all {PHOTO_COUNT} orange: +{POINTS.allPhotoBonus.toLocaleString()} bonus</p>
         <p className="muted">tie? whoever reached their score first wins.</p>

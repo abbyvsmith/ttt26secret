@@ -232,7 +232,8 @@ button.tile:active {
   font-size: 18px;
   color: #6b6b6b;
 }
-.lb-progress .dot-orange {
+.lb-progress .dot-orange,
+.lb-progress .dot-bingo {
   margin-left: 8px;
 }
 .lb-points {
@@ -250,6 +251,9 @@ button.tile:active {
 }
 .dot-orange {
   background: var(--orange);
+}
+.dot-bingo {
+  background: var(--dark);
 }
 
 .rules {
