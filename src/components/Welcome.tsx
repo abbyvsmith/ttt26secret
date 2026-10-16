@@ -165,14 +165,6 @@ export function SignIn({ error: initialError }: { error: string | null }) {
           placeholder={`you@${ALLOWED_EMAIL_DOMAIN}`}
         />
 
-        {mode === 'signup' && (
-          <div className="text-field">
-            <span>which one is you?</span>
-            <NamePicker people={signup.people} selected={personId} onSelect={setPersonId} />
-            {signup.error && <p className="form-error">{signup.error}</p>}
-          </div>
-        )}
-
         {mode !== 'forgot' && (
           <Field
             label="password"
@@ -182,6 +174,14 @@ export function SignIn({ error: initialError }: { error: string | null }) {
             autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
             hint={mode === 'signup' ? `at least ${MIN_PASSWORD} characters` : undefined}
           />
+        )}
+
+        {mode === 'signup' && (
+          <div className="text-field">
+            <span>which one is you?</span>
+            <NamePicker people={signup.people} selected={personId} onSelect={setPersonId} />
+            {signup.error && <p className="form-error">{signup.error}</p>}
+          </div>
         )}
 
         {(submit.error ?? (mode === 'signin' && initialError)) && (
