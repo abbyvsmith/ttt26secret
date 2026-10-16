@@ -148,7 +148,6 @@ export function SignIn({ error: initialError }: { error: string | null }) {
 
   return (
     <div className="welcome">
-      <Title />
       <form className="auth-form" onSubmit={submit.onSubmit}>
         <p className="welcome-copy">
           {mode === 'signup' && 'create your account'}
